@@ -1191,6 +1191,7 @@ func newConsulConfig(runtimeCfg *config.RuntimeConfig, logger hclog.Logger) (*co
 	cfg.TLSPreferServerCipherSuites = runtimeCfg.TLSPreferServerCipherSuites
 	cfg.DefaultQueryTime = runtimeCfg.DefaultQueryTime
 	cfg.MaxQueryTime = runtimeCfg.MaxQueryTime
+	cfg.DisablePrimaryGatewayFallback = runtimeCfg.DisablePrimaryGatewayFallback
 
 	cfg.AutoEncryptAllowTLS = runtimeCfg.AutoEncryptAllowTLS
 
