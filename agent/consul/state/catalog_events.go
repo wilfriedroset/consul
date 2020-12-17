@@ -261,7 +261,7 @@ func ServiceHealthEventsFromChanges(tx ReadTxn, changes Changes) ([]stream.Event
 
 	// Duplicate any events that affected connect-enabled instances (proxies or
 	// native apps) to the relevant Connect topic.
-	connectEvents, err := serviceHealthToConnectEvents(tx, serviceChanges, events...)
+	connectEvents, err := serviceHealthToConnectEvents(tx, events...)
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +318,6 @@ func changeTypeFromChange(change memdb.Change) changeType {
 // in case of a sidecar.
 func serviceHealthToConnectEvents(
 	tx ReadTxn,
-	serviceChanges map[nodeServiceTuple]serviceChange,
 	events ...stream.Event,
 ) ([]stream.Event, error) {
 	var result []stream.Event
@@ -369,6 +368,8 @@ func copyEventForService(event stream.Event, service structs.ServiceName) stream
 	payload := event.Payload.(EventPayloadCheckServiceNode)
 	payload.key = service.Name
 	event.Payload = payload
+	// FIXME: we need payload to have an override for namespace, so that it can be filtered
+	// properly by EventPayloadCheckServiceNode.MatchesKey
 	return event
 }
 
