@@ -1528,7 +1528,7 @@ func TestStructs_validateMetaPair(t *testing.T) {
 	}
 }
 
-func TestSpecificServiceRequest_CacheInfo(t *testing.T) {
+func TestServiceSpecificRequest_CacheInfo(t *testing.T) {
 	tests := []struct {
 		name     string
 		req      ServiceSpecificRequest
@@ -1636,6 +1636,16 @@ func TestSpecificServiceRequest_CacheInfo(t *testing.T) {
 				req.ServiceTag = "bar"
 			},
 			wantSame: false,
+		},
+		{
+			name: "with integress=true",
+			req: ServiceSpecificRequest{
+				Datacenter:  "dc1",
+				ServiceName: "my-service",
+			},
+			mutate: func(req *ServiceSpecificRequest) {
+				req.Ingress = true
+			},
 		},
 	}
 
