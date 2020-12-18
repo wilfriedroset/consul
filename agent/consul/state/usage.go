@@ -61,6 +61,7 @@ const (
 // usage metrics that we track.
 func updateUsage(tx WriteTxn, changes Changes) error {
 	usageDeltas := make(map[string]int)
+	serviceNamesSeen := make(map[string]bool)
 	for _, change := range changes.Changes {
 		var delta int
 		if change.Created() {
@@ -75,60 +76,21 @@ func updateUsage(tx WriteTxn, changes Changes) error {
 		case "services":
 			svc := changeObject(change).(*structs.ServiceNode)
 			usageDeltas[change.Table] += delta
-			serviceIter, err := getWithTxn(tx, servicesTableName, "service", svc.ServiceName, &svc.EnterpriseMeta)
+
+			// If we have already seen this service name in the transaction changes,
+			// continue on. It is possible for multiple services to be deleted in a
+			// single transaction, via DeleteNode, thus we ensure we do not run the
+			// logic more than once per service-name. Currently this is only a
+			// problem for deletion, since it is not possible for multiple service
+			// instances to be created or updated in the same transaction.
+			if serviceNamesSeen[svc.ServiceName] {
+				continue
+			}
+			serviceNamesSeen[svc.ServiceName] = true
+
+			serviceState, err := updateServiceNameUsage(tx, usageDeltas, change)
 			if err != nil {
 				return err
-			}
-
-			var serviceState uniqueServiceState
-			if serviceIter.Next() == nil {
-				// If no services exist, we know we deleted the last service
-				// instance.
-				serviceState = Deleted
-				usageDeltas[serviceNamesUsageTable] -= 1
-			} else if serviceIter.Next() == nil {
-				// If a second call to Next() returns nil, we know only a single
-				// instance exists. If, in addition, a new service name has been
-				// registered, either via creating a new service instance or via
-				// renaming an existing service, than we update our service count.
-				//
-				// We only care about two cases here:
-				// 1. A new service instance has been created with a unique name
-				// 2. An existing service instance has been updated with a new unique name
-				//
-				// These are the only ways a new unique service can be created. The
-				// other valid cases here: an update that does not change the service
-				// name, and a deletion, both do not impact the count of unique service
-				// names in the system.
-
-				if change.Created() {
-					// Given a single existing service instance of the service: If a
-					// service has just been created, then we know this is a new unique
-					// service.
-					serviceState = Created
-					usageDeltas[serviceNamesUsageTable] += 1
-				} else if serviceNameChanged(change) {
-					// Given a single existing service instance of the service: If a
-					// service has been updated with a new service name, then we know
-					// this is a new unique service.
-					serviceState = Created
-					usageDeltas[serviceNamesUsageTable] += 1
-
-					// Check whether the previous name was deleted in this rename, this
-					// is a special case of renaming a service which does not result in
-					// changing the count of unique service names.
-					before := change.Before.(*structs.ServiceNode)
-					beforeSvc, err := firstWithTxn(tx, servicesTableName, "service", before.ServiceName, &before.EnterpriseMeta)
-					if err != nil {
-						return err
-					}
-					if beforeSvc == nil {
-						usageDeltas[serviceNamesUsageTable] -= 1
-						// set serviceState to NoChange since we have both gained and lost a
-						// service, cancelling each other out
-						serviceState = NoChange
-					}
-				}
 			}
 			addEnterpriseServiceUsage(usageDeltas, change, serviceState)
 		}
@@ -142,6 +104,67 @@ func updateUsage(tx WriteTxn, changes Changes) error {
 	}
 
 	return writeUsageDeltas(tx, idx, usageDeltas)
+}
+
+func updateServiceNameUsage(tx WriteTxn, usageDeltas map[string]int, change memdb.Change) (uniqueServiceState, error) {
+	svc := changeObject(change).(*structs.ServiceNode)
+
+	serviceIter, err := getWithTxn(tx, servicesTableName, "service", svc.ServiceName, &svc.EnterpriseMeta)
+	if err != nil {
+		return NoChange, err
+	}
+
+	var serviceState uniqueServiceState
+	if serviceIter.Next() == nil {
+		// If no services exist, we know we deleted the last service
+		// instance.
+		serviceState = Deleted
+		usageDeltas[serviceNamesUsageTable] -= 1
+	} else if serviceIter.Next() == nil {
+		// If a second call to Next() returns nil, we know only a single
+		// instance exists. If, in addition, a new service name has been
+		// registered, either via creating a new service instance or via
+		// renaming an existing service, than we update our service count.
+		//
+		// We only care about two cases here:
+		// 1. A new service instance has been created with a unique name
+		// 2. An existing service instance has been updated with a new unique name
+		//
+		// These are the only ways a new unique service can be created. The
+		// other valid cases here: an update that does not change the service
+		// name, and a deletion, both do not impact the count of unique service
+		// names in the system.
+
+		if change.Created() {
+			// Given a single existing service instance of the service: If a
+			// service has just been created, then we know this is a new unique
+			// service.
+			serviceState = Created
+			usageDeltas[serviceNamesUsageTable] += 1
+		} else if serviceNameChanged(change) {
+			// Given a single existing service instance of the service: If a
+			// service has been updated with a new service name, then we know
+			// this is a new unique service.
+			serviceState = Created
+			usageDeltas[serviceNamesUsageTable] += 1
+
+			// Check whether the previous name was deleted in this rename, this
+			// is a special case of renaming a service which does not result in
+			// changing the count of unique service names.
+			before := change.Before.(*structs.ServiceNode)
+			beforeSvc, err := firstWithTxn(tx, servicesTableName, "service", before.ServiceName, &before.EnterpriseMeta)
+			if err != nil {
+				return NoChange, err
+			}
+			if beforeSvc == nil {
+				usageDeltas[serviceNamesUsageTable] -= 1
+				// set serviceState to NoChange since we have both gained and lost a
+				// service, cancelling each other out
+				serviceState = NoChange
+			}
+		}
+	}
+	return serviceState, nil
 }
 
 // serviceNameChanged returns a boolean that indicates whether the

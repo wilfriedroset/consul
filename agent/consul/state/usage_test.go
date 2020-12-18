@@ -55,6 +55,43 @@ func TestStateStore_Usage_ServiceUsageEmpty(t *testing.T) {
 	require.Equal(t, usage.ServiceInstances, 0)
 }
 
+func TestStateStore_Usage_ServiceUsage_DeleteNode(t *testing.T) {
+	s := testStateStore(t)
+	testRegisterNode(t, s, 1, "node1")
+
+	svc1 := &structs.NodeService{
+		ID:      "service1",
+		Service: "test",
+		Address: "1.1.1.1",
+		Port:    1111,
+	}
+	svc2 := &structs.NodeService{
+		ID:      "service2",
+		Service: "test",
+		Address: "1.1.1.1",
+		Port:    1111,
+	}
+
+	// Register multiple instances on a single node to test that we do not
+	// double count deletions within the same transaction.
+	require.NoError(t, s.EnsureService(1, "node1", svc1))
+	require.NoError(t, s.EnsureService(2, "node1", svc2))
+
+	idx, usage, err := s.ServiceUsage()
+	require.NoError(t, err)
+	require.Equal(t, idx, uint64(2))
+	require.Equal(t, usage.Services, 1)
+	require.Equal(t, usage.ServiceInstances, 2)
+
+	require.NoError(t, s.DeleteNode(3, "node1"))
+
+	idx, usage, err = s.ServiceUsage()
+	require.NoError(t, err)
+	require.Equal(t, idx, uint64(3))
+	require.Equal(t, usage.Services, 0)
+	require.Equal(t, usage.ServiceInstances, 0)
+}
+
 func TestStateStore_Usage_Restore(t *testing.T) {
 	s := testStateStore(t)
 	restore := s.Restore()
@@ -73,6 +110,12 @@ func TestStateStore_Usage_Restore(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, idx, uint64(9))
 	require.Equal(t, count, 1)
+
+	idx, usage, err := s.ServiceUsage()
+	require.NoError(t, err)
+	require.Equal(t, idx, uint64(9))
+	require.Equal(t, usage.Services, 1)
+	require.Equal(t, usage.ServiceInstances, 1)
 }
 
 func TestStateStore_Usage_updateUsage_Underflow(t *testing.T) {
