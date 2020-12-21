@@ -47,9 +47,6 @@ type testCase struct {
 
 	// TODO: move all of these to opts
 	hcltail, jsontail []string
-	privatev4         func() ([]*net.IPAddr, error)
-	publicv6          func() ([]*net.IPAddr, error)
-	hostname          func() (string, error)
 }
 
 // TestConfigFlagsAndEdgecases tests the command line flags and
@@ -943,8 +940,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 				}
 				rt.DataDir = dataDir
 			},
-			publicv6: func() ([]*net.IPAddr, error) {
-				return []*net.IPAddr{ipAddr("dead:beef::1")}, nil
+			opts: LoadOpts{
+				getPublicIPv6: func() ([]*net.IPAddr, error) {
+					return []*net.IPAddr{ipAddr("dead:beef::1")}, nil
+				},
 			},
 		},
 		{
@@ -970,8 +969,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 				}
 				rt.DataDir = dataDir
 			},
-			privatev4: func() ([]*net.IPAddr, error) {
-				return nil, fmt.Errorf("should not detect advertise_addr")
+			opts: LoadOpts{
+				getPrivateIPv4: func() ([]*net.IPAddr, error) {
+					return nil, fmt.Errorf("should not detect advertise_addr")
+				},
 			},
 		},
 		{
@@ -1649,8 +1650,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 			args: []string{`-data-dir=` + dataDir},
 			json: []string{`{ "bind_addr": "0.0.0.0"}`},
 			hcl:  []string{`bind_addr = "0.0.0.0"`},
-			privatev4: func() ([]*net.IPAddr, error) {
-				return nil, errors.New("some error")
+			opts: LoadOpts{
+				getPrivateIPv4: func() ([]*net.IPAddr, error) {
+					return nil, errors.New("some error")
+				},
 			},
 			err: "Error detecting private IPv4 address: some error",
 		},
@@ -1659,8 +1662,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 			args: []string{`-data-dir=` + dataDir},
 			json: []string{`{ "bind_addr": "0.0.0.0"}`},
 			hcl:  []string{`bind_addr = "0.0.0.0"`},
-			privatev4: func() ([]*net.IPAddr, error) {
-				return nil, nil
+			opts: LoadOpts{
+				getPrivateIPv4: func() ([]*net.IPAddr, error) {
+					return nil, nil
+				},
 			},
 			err: "No private IPv4 address found",
 		},
@@ -1669,8 +1674,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 			args: []string{`-data-dir=` + dataDir},
 			json: []string{`{ "bind_addr": "0.0.0.0"}`},
 			hcl:  []string{`bind_addr = "0.0.0.0"`},
-			privatev4: func() ([]*net.IPAddr, error) {
-				return []*net.IPAddr{ipAddr("1.1.1.1"), ipAddr("2.2.2.2")}, nil
+			opts: LoadOpts{
+				getPrivateIPv4: func() ([]*net.IPAddr, error) {
+					return []*net.IPAddr{ipAddr("1.1.1.1"), ipAddr("2.2.2.2")}, nil
+				},
 			},
 			err: "Multiple private IPv4 addresses found. Please configure one",
 		},
@@ -1679,8 +1686,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 			args: []string{`-data-dir=` + dataDir},
 			json: []string{`{ "bind_addr": "::"}`},
 			hcl:  []string{`bind_addr = "::"`},
-			publicv6: func() ([]*net.IPAddr, error) {
-				return nil, errors.New("some error")
+			opts: LoadOpts{
+				getPublicIPv6: func() ([]*net.IPAddr, error) {
+					return nil, errors.New("some error")
+				},
 			},
 			err: "Error detecting public IPv6 address: some error",
 		},
@@ -1689,8 +1698,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 			args: []string{`-data-dir=` + dataDir},
 			json: []string{`{ "bind_addr": "::"}`},
 			hcl:  []string{`bind_addr = "::"`},
-			publicv6: func() ([]*net.IPAddr, error) {
-				return nil, nil
+			opts: LoadOpts{
+				getPublicIPv6: func() ([]*net.IPAddr, error) {
+					return nil, nil
+				},
 			},
 			err: "No public IPv6 address found",
 		},
@@ -1699,8 +1710,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 			args: []string{`-data-dir=` + dataDir},
 			json: []string{`{ "bind_addr": "::"}`},
 			hcl:  []string{`bind_addr = "::"`},
-			publicv6: func() ([]*net.IPAddr, error) {
-				return []*net.IPAddr{ipAddr("dead:beef::1"), ipAddr("dead:beef::2")}, nil
+			opts: LoadOpts{
+				getPublicIPv6: func() ([]*net.IPAddr, error) {
+					return []*net.IPAddr{ipAddr("dead:beef::1"), ipAddr("dead:beef::2")}, nil
+				},
 			},
 			err: "Multiple public IPv6 addresses found. Please configure one",
 		},
@@ -2000,8 +2013,10 @@ func TestLoad_IntegrationWithFlags(t *testing.T) {
 				`-data-dir=` + dataDir,
 				`-node=`,
 			},
-			hostname: func() (string, error) { return "", nil },
-			err:      "node_name cannot be empty",
+			opts: LoadOpts{
+				hostname: func() (string, error) { return "", nil },
+			},
+			err: "node_name cannot be empty",
 		},
 		{
 			desc: "node_meta key too long",
@@ -4845,20 +4860,9 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 				}
 
 				// Then create a builder with the flags.
+				patchLoadOptsShims(&opts)
 				b, err := newBuilder(opts)
 				require.NoError(t, err)
-
-				patchLoadOptsShims(&b.opts)
-				// TODO: remove
-				if tt.hostname != nil {
-					b.opts.hostname = tt.hostname
-				}
-				if tt.privatev4 != nil {
-					b.opts.getPrivateIPv4 = tt.privatev4
-				}
-				if tt.publicv6 != nil {
-					b.opts.getPublicIPv6 = tt.publicv6
-				}
 
 				// read the source fragements
 				for i, data := range srcs {
@@ -4898,9 +4902,11 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 				// build a default configuration, then patch the fields we expect to change
 				// and compare it with the generated configuration. Since the expected
 				// runtime config has been validated we do not need to validate it again.
-				x, err := newBuilder(LoadOpts{})
+				expectedOpts := LoadOpts{}
+				patchLoadOptsShims(&expectedOpts)
+				x, err := newBuilder(expectedOpts)
 				require.NoError(t, err)
-				patchLoadOptsShims(&x.opts)
+
 				expected, err := x.Build()
 				if err != nil {
 					t.Fatalf("build default failed: %s", err)
