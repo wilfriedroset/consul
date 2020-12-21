@@ -36,10 +36,9 @@ import (
 type testCase struct {
 	desc           string
 	args           []string
-	pre, post      func()
+	pre            func()
 	json, jsontail []string
 	hcl, hcltail   []string
-	skipformat     bool
 	privatev4      func() ([]*net.IPAddr, error)
 	publicv6       func() ([]*net.IPAddr, error)
 	patch          func(rt *RuntimeConfig)
@@ -4832,7 +4831,7 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 
 			// json and hcl sources need to be in sync
 			// to make sure we're generating the same config
-			if len(tt.json) != len(tt.hcl) && !tt.skipformat {
+			if len(tt.json) != len(tt.hcl) {
 				t.Fatal(tt.desc, ": JSON and HCL test case out of sync")
 			}
 
@@ -4840,12 +4839,6 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 			srcs, tails := tt.json, tt.jsontail
 			if format == "hcl" {
 				srcs, tails = tt.hcl, tt.hcltail
-			}
-
-			// If we're skipping a format and the current format is empty,
-			// then skip it!
-			if tt.skipformat && len(srcs) == 0 {
-				continue
 			}
 
 			// build the description
@@ -4871,11 +4864,6 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 				if tt.pre != nil {
 					tt.pre()
 				}
-				defer func() {
-					if tt.post != nil {
-						tt.post()
-					}
-				}()
 
 				// Then create a builder with the flags.
 				b, err := newBuilder(flags)
