@@ -34,18 +34,19 @@ import (
 
 // testCase used to test different config loading and flag parsing scenarios.
 type testCase struct {
-	desc           string
-	args           []string
-	pre            func()
-	json, jsontail []string
-	hcl, hcltail   []string
-	privatev4      func() ([]*net.IPAddr, error)
-	publicv6       func() ([]*net.IPAddr, error)
-	patch          func(rt *RuntimeConfig)
-	patchActual    func(rt *RuntimeConfig)
-	err            string
-	warns          []string
-	hostname       func() (string, error)
+	desc  string
+	args  []string
+	pre   func()
+	json  []string
+	hcl   []string
+	patch func(rt *RuntimeConfig) // expected
+	err   string                  // expectedErr
+	warns []string                // expectedWarnings
+
+	hcltail, jsontail []string
+	privatev4         func() ([]*net.IPAddr, error)
+	publicv6          func() ([]*net.IPAddr, error)
+	hostname          func() (string, error)
 }
 
 // TestConfigFlagsAndEdgecases tests the command line flags and
@@ -3891,17 +3892,6 @@ func TestBuilder_BuildAndValidate_ConfigFlagsAndEdgecases(t *testing.T) {
 				}
 			`,
 			},
-			patchActual: func(rt *RuntimeConfig) {
-				// Wipe the time tracking fields to make comparison easier.
-				for _, raw := range rt.ConfigEntryBootstrap {
-					if entry, ok := raw.(*structs.ServiceIntentionsConfigEntry); ok {
-						for _, src := range entry.Sources {
-							src.LegacyCreateTime = nil
-							src.LegacyUpdateTime = nil
-						}
-					}
-				}
-			},
 			patch: func(rt *RuntimeConfig) {
 				rt.DataDir = dataDir
 				rt.ConfigEntryBootstrap = []structs.ConfigEntry{
@@ -3978,17 +3968,6 @@ func TestBuilder_BuildAndValidate_ConfigFlagsAndEdgecases(t *testing.T) {
 				  }
 				}
 			`,
-			},
-			patchActual: func(rt *RuntimeConfig) {
-				// Wipe the time tracking fields to make comparison easier.
-				for _, raw := range rt.ConfigEntryBootstrap {
-					if entry, ok := raw.(*structs.ServiceIntentionsConfigEntry); ok {
-						for _, src := range entry.Sources {
-							src.LegacyCreateTime = nil
-							src.LegacyUpdateTime = nil
-						}
-					}
-				}
 			},
 			patch: func(rt *RuntimeConfig) {
 				rt.DataDir = dataDir
@@ -4941,9 +4920,6 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 				require.Equal(t, actual.DataDir, actual.ACLTokens.DataDir)
 				expected.ACLTokens.DataDir = actual.ACLTokens.DataDir
 
-				if tt.patchActual != nil {
-					tt.patchActual(&actual)
-				}
 				require.Equal(t, expected, actual)
 			})
 		}
