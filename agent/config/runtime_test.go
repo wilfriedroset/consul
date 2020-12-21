@@ -32,7 +32,8 @@ import (
 	"github.com/hashicorp/consul/types"
 )
 
-type configTest struct {
+// testCase used to test different config loading and flag parsing scenarios.
+type testCase struct {
 	desc           string
 	args           []string
 	pre, post      func()
@@ -51,19 +52,13 @@ type configTest struct {
 // TestConfigFlagsAndEdgecases tests the command line flags and
 // edgecases for the config parsing. It provides a test structure which
 // checks for warnings on deprecated fields and flags.  These tests
-// should check one option at a time if possible and should use generic
-// values, e.g. 'a' or 1 instead of 'servicex' or 3306.
-
+// should check one option at a time if possible
 func TestBuilder_BuildAndValidate_ConfigFlagsAndEdgecases(t *testing.T) {
-	if testing.Short() {
-		t.Skip("too slow for testing.Short")
-	}
-
 	dataDir := testutil.TempDir(t, "consul")
 
 	defaultEntMeta := structs.DefaultEnterpriseMeta()
 
-	tests := []configTest{
+	tests := []testCase{
 		// ------------------------------------------------------------
 		// cmd line flags
 		//
@@ -4820,12 +4815,12 @@ func TestBuilder_BuildAndValidate_ConfigFlagsAndEdgecases(t *testing.T) {
 	testConfig(t, tests, dataDir)
 }
 
-func testConfig(t *testing.T, tests []configTest, dataDir string) {
-	t.Helper()
+func testConfig(t *testing.T, tests []testCase, dataDir string) {
 	for _, tt := range tests {
 		for pass, format := range []string{"json", "hcl"} {
 			// clean data dir before every test
-			cleanDir(dataDir)
+			os.RemoveAll(dataDir)
+			os.MkdirAll(dataDir, 0755)
 
 			// when we test only flags then there are no JSON or HCL
 			// sources and we need to make only one pass over the
@@ -8253,19 +8248,6 @@ func writeFile(path string, data []byte) {
 		panic(err)
 	}
 	if err := ioutil.WriteFile(path, data, 0640); err != nil {
-		panic(err)
-	}
-}
-
-func cleanDir(path string) {
-	root := path
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if path == root {
-			return nil
-		}
-		return os.RemoveAll(path)
-	})
-	if err != nil {
 		panic(err)
 	}
 }
