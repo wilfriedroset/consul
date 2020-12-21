@@ -18,8 +18,12 @@ var enterpriseConfigKeyWarnings []string
 
 func init() {
 	for k := range enterpriseConfigMap {
-		if k == "non_voting_server" {
+		switch k {
+		case "non_voting_server":
 			// this is an alias for "read_replica" so we shouldn't see it in warnings
+			continue
+		case "segments", "segment":
+			// these are not set by the config
 			continue
 		}
 		enterpriseConfigKeyWarnings = append(enterpriseConfigKeyWarnings, enterpriseConfigKeyError{key: k}.Error())
