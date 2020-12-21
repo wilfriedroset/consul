@@ -71,6 +71,15 @@ type LoadOpts struct {
 	// Overrides are optional config sources that are applied as the very last
 	// config source so they can override any previous values.
 	Overrides []Source
+
+	// hostname is a shim for testing, allowing tests to specify a replacement
+	// for os.Hostname.
+	hostname func() (string, error)
+
+	// getPrivateIPv4 and getPublicIPv6 are shims for testing, allowing tests to
+	// specify a replacement for ipaddr.GetPrivateIPv4 and ipaddr.GetPublicIPv6.
+	getPrivateIPv4 func() ([]*net.IPAddr, error)
+	getPublicIPv6  func() ([]*net.IPAddr, error)
 }
 
 // Load will build the configuration including the config source injected
@@ -112,8 +121,7 @@ type LoadResult struct {
 // previously set values. Slice values are merged by concatenating the two slices.
 // Map values are merged by over-laying the later maps on top of earlier ones.
 type builder struct {
-	// devMode stores the value of the -dev flag, and enables development mode.
-	devMode *bool
+	opts LoadOpts
 
 	// Head, Sources, and Tail are used to manage the order of the
 	// config sources, as described in the comments above.
@@ -124,15 +132,6 @@ type builder struct {
 	// Warnings contains the warnings encountered when
 	// parsing the configuration.
 	Warnings []string
-
-	// hostname is a shim for testing, allowing tests to specify a replacement
-	// for os.Hostname.
-	hostname func() (string, error)
-
-	// getPrivateIPv4 and getPublicIPv6 are shims for testing, allowing tests to
-	// specify a replacement for ipaddr.GetPrivateIPv4 and ipaddr.GetPublicIPv6.
-	getPrivateIPv4 func() ([]*net.IPAddr, error)
-	getPublicIPv6  func() ([]*net.IPAddr, error)
 
 	// err contains the first error that occurred during
 	// building the runtime configuration.
@@ -155,8 +154,8 @@ func newBuilder(opts LoadOpts) (*builder, error) {
 	}
 
 	b := &builder{
-		devMode: opts.DevMode,
-		Head:    []Source{DefaultSource(), DefaultEnterpriseSource()},
+		opts: opts,
+		Head: []Source{DefaultSource(), DefaultEnterpriseSource()},
 	}
 
 	if b.boolVal(opts.DevMode) {
@@ -488,25 +487,7 @@ func (b *builder) Build() (rt RuntimeConfig, err error) {
 	advertiseAddr := b.makeIPAddr(b.expandFirstIP("advertise_addr", c.AdvertiseAddrLAN), bindAddr)
 
 	if ipaddr.IsAny(advertiseAddr) {
-
-		var addrtyp string
-		var detect func() ([]*net.IPAddr, error)
-		switch {
-		case ipaddr.IsAnyV4(advertiseAddr):
-			addrtyp = "private IPv4"
-			detect = b.getPrivateIPv4
-			if detect == nil {
-				detect = ipaddr.GetPrivateIPv4
-			}
-
-		case ipaddr.IsAnyV6(advertiseAddr):
-			addrtyp = "public IPv6"
-			detect = b.getPublicIPv6
-			if detect == nil {
-				detect = ipaddr.GetPublicIPv6
-			}
-		}
-
+		addrtyp, detect := advertiseAddrFunc(b.opts, advertiseAddr)
 		advertiseAddrs, err := detect()
 		if err != nil {
 			return RuntimeConfig{}, fmt.Errorf("Error detecting %s address: %s", addrtyp, err)
@@ -1021,7 +1002,7 @@ func (b *builder) Build() (rt RuntimeConfig, err error) {
 		DataDir:                                dataDir,
 		Datacenter:                             datacenter,
 		DefaultQueryTime:                       b.durationVal("default_query_time", c.DefaultQueryTime),
-		DevMode:                                b.boolVal(b.devMode),
+		DevMode:                                b.boolVal(b.opts.DevMode),
 		DisableAnonymousSignature:              b.boolVal(c.DisableAnonymousSignature),
 		DisableCoordinates:                     b.boolVal(c.DisableCoordinates),
 		DisableHostNodeID:                      b.boolVal(c.DisableHostNodeID),
@@ -1154,6 +1135,27 @@ func (b *builder) Build() (rt RuntimeConfig, err error) {
 	}
 
 	return rt, nil
+}
+
+func advertiseAddrFunc(opts LoadOpts, advertiseAddr *net.IPAddr) (string, func() ([]*net.IPAddr, error)) {
+	switch {
+	case ipaddr.IsAnyV4(advertiseAddr):
+		fn := opts.getPrivateIPv4
+		if fn == nil {
+			fn = ipaddr.GetPrivateIPv4
+		}
+		return "private IPv4", fn
+
+	case ipaddr.IsAnyV6(advertiseAddr):
+		fn := opts.getPublicIPv6
+		if fn == nil {
+			fn = ipaddr.GetPublicIPv6
+		}
+		return "public IPv6", fn
+
+	default:
+		panic("unsupported net.IPAddr Type")
+	}
 }
 
 // reBasicName validates that a field contains only lower case alphanumerics,
@@ -1927,7 +1929,7 @@ func (b *builder) tlsCipherSuites(name string, v *string) []uint16 {
 func (b *builder) nodeName(v *string) string {
 	nodeName := b.stringVal(v)
 	if nodeName == "" {
-		fn := b.hostname
+		fn := b.opts.hostname
 		if fn == nil {
 			fn = os.Hostname
 		}

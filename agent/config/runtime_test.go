@@ -36,13 +36,16 @@ import (
 type testCase struct {
 	desc  string
 	args  []string
-	pre   func()
+	pre   func() // setup(t *testing.T)
 	json  []string
 	hcl   []string
 	patch func(rt *RuntimeConfig) // expected
 	err   string                  // expectedErr
 	warns []string                // expectedWarnings
 
+	opts LoadOpts
+
+	// TODO: move all of these to opts
 	hcltail, jsontail []string
 	privatev4         func() ([]*net.IPAddr, error)
 	publicv6          func() ([]*net.IPAddr, error)
@@ -53,8 +56,8 @@ type testCase struct {
 // edgecases for the config parsing. It provides a test structure which
 // checks for warnings on deprecated fields and flags.  These tests
 // should check one option at a time if possible
-func TestBuilder_BuildAndValidate_ConfigFlagsAndEdgecases(t *testing.T) {
-	dataDir := testutil.TempDir(t, "consul")
+func TestLoad_IntegrationWithFlags(t *testing.T) {
+	dataDir := testutil.TempDir(t, "config")
 
 	defaultEntMeta := structs.DefaultEnterpriseMeta()
 
@@ -4830,14 +4833,11 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 			}
 
 			t.Run(strings.Join(desc, ":"), func(t *testing.T) {
-				// first parse the flags
-				flags := LoadOpts{}
+
+				opts := tt.opts
 				fs := flag.NewFlagSet("", flag.ContinueOnError)
-				AddFlags(fs, &flags)
-				err := fs.Parse(tt.args)
-				if err != nil {
-					t.Fatalf("ParseFlags failed: %s", err)
-				}
+				AddFlags(fs, &opts)
+				require.NoError(t, fs.Parse(tt.args))
 				require.Len(t, fs.Args(), 0)
 
 				if tt.pre != nil {
@@ -4845,20 +4845,19 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 				}
 
 				// Then create a builder with the flags.
-				b, err := newBuilder(flags)
-				if err != nil {
-					t.Fatal("NewBuilder", err)
-				}
+				b, err := newBuilder(opts)
+				require.NoError(t, err)
 
-				patchBuilderShims(b)
+				patchLoadOptsShims(&b.opts)
+				// TODO: remove
 				if tt.hostname != nil {
-					b.hostname = tt.hostname
+					b.opts.hostname = tt.hostname
 				}
 				if tt.privatev4 != nil {
-					b.getPrivateIPv4 = tt.privatev4
+					b.opts.getPrivateIPv4 = tt.privatev4
 				}
 				if tt.publicv6 != nil {
-					b.getPublicIPv6 = tt.publicv6
+					b.opts.getPublicIPv6 = tt.publicv6
 				}
 
 				// read the source fragements
@@ -4900,12 +4899,8 @@ func testConfig(t *testing.T, tests []testCase, dataDir string) {
 				// and compare it with the generated configuration. Since the expected
 				// runtime config has been validated we do not need to validate it again.
 				x, err := newBuilder(LoadOpts{})
-				if err != nil {
-					t.Fatal(err)
-				}
-				x.hostname = b.hostname
-				x.getPrivateIPv4 = func() ([]*net.IPAddr, error) { return []*net.IPAddr{ipAddr("10.0.0.1")}, nil }
-				x.getPublicIPv6 = func() ([]*net.IPAddr, error) { return []*net.IPAddr{ipAddr("dead:beef::1")}, nil }
+				require.NoError(t, err)
+				patchLoadOptsShims(&x.opts)
 				expected, err := x.Build()
 				if err != nil {
 					t.Fatalf("build default failed: %s", err)
