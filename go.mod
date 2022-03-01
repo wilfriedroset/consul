@@ -9,13 +9,15 @@ replace github.com/hashicorp/consul/sdk => ./sdk
 replace launchpad.net/gocheck => github.com/go-check/check v0.0.0-20140225173054-eb6ee6f84d0a
 
 require (
+	github.com/Azure/go-autorest/autorest/azure/auth v0.5.11 // indirect
+	github.com/Azure/go-autorest/autorest/to v0.4.0 // indirect
 	github.com/Microsoft/go-winio v0.4.3 // indirect
 	github.com/NYTimes/gziphandler v1.0.1
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/armon/go-metrics v0.3.6
 	github.com/armon/go-radix v1.0.0
-	github.com/aws/aws-sdk-go v1.25.41
-	github.com/coredns/coredns v1.1.2
+	github.com/aws/aws-sdk-go v1.25.48
+	github.com/coredns/coredns v1.6.6
 	github.com/coreos/go-oidc v2.1.0+incompatible
 	github.com/digitalocean/godo v1.10.0 // indirect
 	github.com/docker/go-connections v0.3.0
@@ -25,7 +27,6 @@ require (
 	github.com/gogo/protobuf v1.2.2-0.20190723190241-65acae22fc9d
 	github.com/golang/protobuf v1.3.5
 	github.com/google/go-cmp v0.5.2
-	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/google/gofuzz v1.2.0
 	github.com/google/tcpproxy v0.0.0-20180808230851-dfa16c61dad2
 	github.com/hashicorp/consul/api v1.8.0
@@ -58,9 +59,8 @@ require (
 	github.com/hashicorp/serf v0.9.5
 	github.com/hashicorp/vault/api v1.0.5-0.20200717191844-f687267c8086
 	github.com/hashicorp/yamux v0.0.0-20200609203250-aecfd211c9ce
-	github.com/imdario/mergo v0.3.6
+	github.com/imdario/mergo v0.3.7
 	github.com/joyent/triton-go v1.7.1-0.20200416154420-6801d15b779f // indirect
-	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/text v0.1.0
 	github.com/miekg/dns v1.1.31
 	github.com/mitchellh/cli v1.1.0
@@ -79,18 +79,14 @@ require (
 	github.com/ryanuber/columnize v2.1.0+incompatible
 	github.com/shirou/gopsutil/v3 v3.20.10
 	github.com/stretchr/testify v1.6.1
-	go.opencensus.io v0.22.0 // indirect
 	go.uber.org/goleak v1.1.10
-	golang.org/x/crypto v0.0.0-20200930160638-afb6bcd081ae
-	golang.org/x/net v0.0.0-20200930145003-4acb6c075d10
+	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3
+	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
-	golang.org/x/sys v0.0.0-20201024232916-9f70ab9862d5
-	golang.org/x/text v0.3.3 // indirect
+	golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.org/x/tools v0.0.0-20200513154647-78b527d18275 // indirect
-	google.golang.org/api v0.9.0 // indirect
-	google.golang.org/appengine v1.6.0 // indirect
 	google.golang.org/grpc v1.25.1
 	gopkg.in/square/go-jose.v2 v2.5.1
 	k8s.io/api v0.16.9
